@@ -1,5 +1,9 @@
+
 {
   "name": "The Immortal Fox",
-  "description": "An interactive 3D web application where an AI-generated figure (using Three.js) navigates a room based on keyboard controls, powered by Gemini for architectural layout and logic tips.",
-  "requestFramePermissions": []
+  "description": "An interactive 3D web application with gyro controls for mobile and WASD for desktop.",
+  "requestFramePermissions": [
+    "accelerometer",
+    "gyroscope"
+  ]
 }
