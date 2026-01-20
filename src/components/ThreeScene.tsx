@@ -12,6 +12,7 @@ interface ThreeSceneProps {
 
 export interface ThreeSceneHandle {
   resetGame: () => void;
+  startMobileMotion: () => Promise<boolean>;
 }
 
 const THEME_COLOR = 0xE2725B; // Terracotta
@@ -30,15 +31,18 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
   
   const keysPressed = useRef<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   
   // IMMUNITY STATE
   const [hasImmunity, setHasImmunity] = useState(false);
-  const hasEverHadImmunity = useRef(false); // The permanent lock
+  const hasEverHadImmunity = useRef(false);
   const collectedCount = useRef(initialMushroomCount);
 
+  // Motion State
   const velocity = useRef(new THREE.Vector3());
   const mouseRotation = useRef({ yaw: 0, pitch: 0.3 });
   const targetRotation = useRef({ yaw: 0, pitch: 0.3 });
+  const gyroSteer = useRef(0);
   const isDragging = useRef(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
@@ -73,6 +77,17 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
         spawnMushrooms(sceneRef.current);
       }
       if (onMushroomCollect) onMushroomCollect(0);
+    },
+    startMobileMotion: async () => {
+      if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
+        try {
+          const response = await (DeviceOrientationEvent as any).requestPermission();
+          return response === 'granted';
+        } catch (e) {
+          return false;
+        }
+      }
+      return true;
     }
   }));
 
@@ -151,9 +166,7 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
 
   const spawnMushrooms = (scene: THREE.Scene) => {
     const activeRed = mushroomsRef.current.length;
-    // We only need mushrooms if we haven't hit the cap, OR we can keep them spawning for fun even if immune
     const needed = Math.max(0, (MAX_TOTAL_MUSHROOMS - collectedCount.current) - activeRed);
-    // If we have immunity, just keep 3 red mushrooms on the board for "eating"
     const targetCount = hasEverHadImmunity.current ? 3 : needed;
     
     for (let k = 0; k < targetCount; k++) {
@@ -178,27 +191,6 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
     nemesisMushroomsRef.current.push(n);
   };
 
-  const createEnvironment = (scene: THREE.Scene) => {
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), new THREE.MeshStandardMaterial({ color: 0x1a2a1a }));
-    floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true;
-    scene.add(floor);
-
-    for (let i = 0; i < 400; i++) {
-      const tree = new THREE.Group();
-      const trunkH = 10 + Math.random() * 10;
-      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.2, trunkH), new THREE.MeshStandardMaterial({ color: 0x3d2b1f }));
-      trunk.position.y = trunkH / 2; tree.add(trunk);
-      const leaves = new THREE.Mesh(new THREE.ConeGeometry(8, trunkH * 2, 8), new THREE.MeshStandardMaterial({ color: 0x2d4c2d }));
-      leaves.position.y = trunkH + (trunkH / 2); tree.add(leaves);
-      const x = (Math.random() - 0.5) * 2000;
-      const z = (Math.random() - 0.5) * 2000;
-      if (Math.abs(x) > 50 || Math.abs(z) > 50) {
-        tree.position.set(x, 0, z);
-        scene.add(tree);
-      }
-    }
-  };
-
   useEffect(() => {
     if (!containerRef.current) return;
     const scene = new THREE.Scene();
@@ -217,7 +209,24 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
     sun.position.set(100, 300, 100); sun.castShadow = true;
     scene.add(sun);
 
-    createEnvironment(scene);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), new THREE.MeshStandardMaterial({ color: 0x1a2a1a }));
+    floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true;
+    scene.add(floor);
+
+    for (let i = 0; i < 400; i++) {
+      const tree = new THREE.Group();
+      const trunkH = 10 + Math.random() * 10;
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.2, trunkH), new THREE.MeshStandardMaterial({ color: 0x3d2b1f }));
+      trunk.position.y = trunkH / 2; tree.add(trunk);
+      const leaves = new THREE.Mesh(new THREE.ConeGeometry(8, trunkH * 2, 8), new THREE.MeshStandardMaterial({ color: 0x2d4c2d }));
+      leaves.position.y = trunkH + (trunkH / 2); tree.add(leaves);
+      const x = (Math.random() - 0.5) * 2000;
+      const z = (Math.random() - 0.5) * 2000;
+      if (Math.abs(x) > 50 || Math.abs(z) > 50) {
+        tree.position.set(x, 0, z);
+        scene.add(tree);
+      }
+    }
 
     const loadChar = async () => {
       setIsLoading(true);
@@ -239,6 +248,7 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
     };
     loadChar();
 
+    // Event Handlers
     const onMouseDown = (e: MouseEvent) => { isDragging.current = true; lastMousePos.current = { x: e.clientX, y: e.clientY }; };
     const onMouseUp = () => isDragging.current = false;
     const onMouseMove = (e: MouseEvent) => {
@@ -251,10 +261,21 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
         lastMousePos.current = { x: e.clientX, y: e.clientY };
       }
     };
+    
+    const handleOrientation = (e: DeviceOrientationEvent) => {
+      if (e.gamma !== null) {
+        // Gamma is the left-to-right tilt in degrees [-90, 90]
+        const tilt = e.gamma / 45; // Normalize to roughly [-1, 1]
+        gyroSteer.current = -tilt; 
+      }
+    };
 
     window.addEventListener('mousedown', onMouseDown);
     window.addEventListener('mouseup', onMouseUp);
     window.addEventListener('mousemove', onMouseMove);
+    if (isMobile) {
+      window.addEventListener('deviceorientation', handleOrientation);
+    }
 
     const clock = new THREE.Clock();
     const animate = () => {
@@ -269,23 +290,28 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
         const char = charGroupRef.current;
         const model = char.children[0];
         const keys = keysPressed.current;
-        
-        // GIANT RULE: 5 mushrooms OR hasEverHadImmunity
         const isGiant = collectedCount.current >= 5 || hasEverHadImmunity.current;
 
         const targetScale = isGiant ? 0.3 : 0.015;
-        if (model) {
-          model.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.05);
-        }
+        if (model) model.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.05);
 
         const inputDir = new THREE.Vector3();
-        if (keys.has('w')) inputDir.z += 1;
-        if (keys.has('s')) inputDir.z -= 1;
-        if (keys.has('a')) inputDir.x += 1;
-        if (keys.has('d')) inputDir.x -= 1;
+        
+        if (isMobile) {
+          // MOBILE: Always move forward
+          inputDir.z = 1;
+          // Apply tilt steering
+          targetRotation.current.yaw += gyroSteer.current * delta * 2;
+        } else {
+          // DESKTOP: WASD controls
+          if (keys.has('w')) inputDir.z += 1;
+          if (keys.has('s')) inputDir.z -= 1;
+          if (keys.has('a')) inputDir.x += 1;
+          if (keys.has('d')) inputDir.x -= 1;
+        }
 
         const moveSpeed = isGiant ? 600 : 180;
-        if (inputDir.length() > 0) {
+        if (inputDir.length() > 0 || isMobile) {
           inputDir.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), mouseRotation.current.yaw);
           const targetRot = Math.atan2(inputDir.x, inputDir.z);
           char.rotation.y = THREE.MathUtils.lerp(char.rotation.y, targetRot, 0.15);
@@ -306,23 +332,14 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
           mixerRef.current.update(delta);
         }
 
-        // UNIQUE GOLDEN MUSHROOM SPAWN:
-        // Only if (5 mushrooms) AND (never had immunity before) AND (one isn't already sitting on the map)
+        // Gameplay triggers (same as before)
         if (collectedCount.current >= 5 && !hasEverHadImmunity.current && !goldMushroomRef.current) {
           const gm = createMushroomModel(GOLD_COLOR);
           gm.scale.set(12, 12, 12);
           const angle = Math.random() * Math.PI * 2;
-          // Spawn it ahead of the player
-          const spawnDist = 180;
-          gm.position.set(char.position.x + Math.cos(angle) * spawnDist, 0, char.position.z + Math.sin(angle) * spawnDist);
+          gm.position.set(char.position.x + Math.cos(angle) * 180, 0, char.position.z + Math.sin(angle) * 180);
           scene.add(gm);
           goldMushroomRef.current = gm;
-        }
-
-        // Despawn logic ONLY if we lose mushrooms before eating the gold one
-        if (collectedCount.current < 5 && !hasEverHadImmunity.current && goldMushroomRef.current) {
-          scene.remove(goldMushroomRef.current);
-          goldMushroomRef.current = null;
         }
 
         if (goldMushroomRef.current) {
@@ -330,11 +347,8 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
           if (char.position.distanceTo(goldMushroomRef.current.position) < 18) {
             scene.remove(goldMushroomRef.current);
             goldMushroomRef.current = null;
-            
-            // LOCK THE IMMUNITY
             setHasImmunity(true);
             hasEverHadImmunity.current = true;
-            
             const bubble = createSpeechBubble();
             scene.add(bubble);
             speechBubbleRef.current = bubble;
@@ -347,12 +361,10 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
           speechBubbleRef.current.position.y += Math.sin(elapsed * 5) * 0.8;
         }
 
-        // COLLECTION
         const collectDist = isGiant ? 12 : 3.5;
         mushroomsRef.current.forEach((m, i) => {
           if (char.position.distanceTo(m.position) < collectDist) {
-            scene.remove(m); 
-            mushroomsRef.current.splice(i, 1);
+            scene.remove(m); mushroomsRef.current.splice(i, 1);
             if (!hasEverHadImmunity.current) {
               collectedCount.current++;
               if (onMushroomCollect) onMushroomCollect(collectedCount.current);
@@ -360,21 +372,14 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
             }
           }
         });
-        
         spawnMushrooms(scene);
 
-        // ENEMIES
         const hitDist = isGiant ? 15 : 4.5;
         nemesisMushroomsRef.current.forEach((n, i) => {
           const dir = new THREE.Vector3().subVectors(char.position, n.position).normalize();
-          const nemesisSpeed = isGiant ? 25 : 10;
-          n.position.addScaledVector(dir, nemesisSpeed * delta);
-          
+          n.position.addScaledVector(dir, (isGiant ? 25 : 10) * delta);
           if (char.position.distanceTo(n.position) < hitDist) {
-            scene.remove(n); 
-            nemesisMushroomsRef.current.splice(i, 1);
-            
-            // IMMUNITY CHECK: No penalty if immunity is active
+            scene.remove(n); nemesisMushroomsRef.current.splice(i, 1);
             if (!hasEverHadImmunity.current) {
               collectedCount.current = Math.max(0, collectedCount.current - 1);
               if (onMushroomCollect) onMushroomCollect(collectedCount.current);
@@ -383,13 +388,12 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
           }
         });
 
-        // CAMERA
+        // Dynamic Camera
         const baseDist = isGiant ? 140 : 35;
         const baseHeight = isGiant ? 70 : 18;
         const h = baseHeight + Math.sin(mouseRotation.current.pitch) * baseDist * 0.5;
         const camZ = Math.cos(mouseRotation.current.pitch) * baseDist;
         const camOffset = new THREE.Vector3(0, h, -camZ).applyAxisAngle(new THREE.Vector3(0, 1, 0), mouseRotation.current.yaw);
-        
         camera.position.lerp(char.position.clone().add(camOffset), 0.12);
         camera.lookAt(char.position.x, char.position.y + (isGiant ? 12 : 2.5), char.position.z);
       }
@@ -403,7 +407,6 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
       renderer.setSize(window.innerWidth, window.innerHeight);
     };
     window.addEventListener('resize', handleResize);
-
     const onKeyDown = (e: KeyboardEvent) => keysPressed.current.add(e.key.toLowerCase());
     const onKeyUp = (e: KeyboardEvent) => keysPressed.current.delete(e.key.toLowerCase());
     window.addEventListener('keydown', onKeyDown);
@@ -416,11 +419,12 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
       window.removeEventListener('mousedown', onMouseDown);
       window.removeEventListener('mouseup', onMouseUp);
       window.removeEventListener('mousemove', onMouseMove);
+      if (isMobile) window.removeEventListener('deviceorientation', handleOrientation);
       renderer.dispose();
     };
   }, []);
 
-  return <div ref={containerRef} className="w-full h-full overflow-hidden cursor-move" />;
+  return <div ref={containerRef} className="w-full h-full overflow-hidden cursor-move touch-none" />;
 });
 
 export default ThreeScene;
