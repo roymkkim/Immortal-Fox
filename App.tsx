@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import ThreeScene, { ThreeSceneHandle } from './components/ThreeScene';
 
 const FOX_MODEL_URL = "https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/Fox/glTF-Binary/Fox.glb";
@@ -32,6 +33,7 @@ const App: React.FC = () => {
         onMushroomCollect={(count) => setMushroomsCollected(count)}
         initialMushroomCount={mushroomsCollected}
       />
+      <Analytics />
 
       {/* Top Left Branding */}
       <div className="absolute top-10 left-10 flex flex-col pointer-events-none select-none">
