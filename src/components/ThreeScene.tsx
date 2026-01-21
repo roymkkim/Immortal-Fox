@@ -307,12 +307,12 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
         if (isMoving) {
           if (moveStartTime.current === 0) moveStartTime.current = Date.now();
           const holdDuration = Date.now() - moveStartTime.current;
-          const maxSpeed = isGiant ? 600 : 180;
+        const maxSpeed = isGiant ? 300 : 90;
           const runThreshold = 400; 
           
           if (holdDuration > runThreshold) {
             fadeTo(animations.current.run);
-            velocity.current.add(inputDir.clone().normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), mouseRotation.current.yaw).multiplyScalar(maxSpeed * 1.8 * delta));
+            velocity.current.add(inputDir.clone().normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), mouseRotation.current.yaw).multiplyScalar(maxSpeed * 1.3 * delta));
           } else {
             fadeTo(animations.current.walk);
             velocity.current.add(inputDir.clone().normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), mouseRotation.current.yaw).multiplyScalar(maxSpeed * delta));
