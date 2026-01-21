@@ -26,8 +26,9 @@ const FLOOR_COLOR = 0x2F5D50;
 const MIST_COLOR = 0x7A6BAA;
 
 // Scales
-const DEFAULT_SCALE = 0.03; // Increased from 0.015
-const GIANT_SCALE = 0.6;    // Increased from 0.3
+const DEFAULT_SCALE = 0.03; 
+// 0.03 * 20 = 0.6
+const GIANT_SCALE = 0.6;    
 
 const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, externalModelUrl, onMushroomCollect, initialMushroomCount = 0 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -36,7 +37,6 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
   const mushroomsRef = useRef<THREE.Group[]>([]);
   const nemesisMushroomsRef = useRef<THREE.Group[]>([]);
   const goldMushroomRef = useRef<THREE.Group | null>(null);
-  const speechBubbleRef = useRef<THREE.Group | null>(null);
   const mistGroupRef = useRef<THREE.Group | null>(null);
   
   const keysPressed = useRef<Set<string>>(new Set());
@@ -54,7 +54,6 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
   const isDragging = useRef(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
 
-  // Animation Refs
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const animations = useRef<{ survey: THREE.AnimationAction | null, walk: THREE.AnimationAction | null, run: THREE.AnimationAction | null }>({
     survey: null, walk: null, run: null
@@ -63,28 +62,30 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
   
   const gltfLoader = new GLTFLoader();
 
-  useImperativeHandle(ref, () => ({
-    resetGame: () => {
-      collectedCount.current = 0;
-      setHasImmunity(false);
-      hasEverHadImmunity.current = false;
-      if (charGroupRef.current) {
-        charGroupRef.current.position.set(0, 0, 0);
-        velocity.current.set(0, 0, 0);
-      }
-      if (sceneRef.current) {
-        nemesisMushroomsRef.current.forEach(n => sceneRef.current?.remove(n));
-        nemesisMushroomsRef.current = [];
-        mushroomsRef.current.forEach(m => sceneRef.current?.remove(m));
-        mushroomsRef.current = [];
-        if (goldMushroomRef.current) sceneRef.current.remove(goldMushroomRef.current);
+  const resetInternal = () => {
+    collectedCount.current = 0;
+    setHasImmunity(false);
+    hasEverHadImmunity.current = false;
+    if (charGroupRef.current) {
+      charGroupRef.current.position.set(0, 0, 0);
+      velocity.current.set(0, 0, 0);
+    }
+    if (sceneRef.current) {
+      nemesisMushroomsRef.current.forEach(n => sceneRef.current?.remove(n));
+      nemesisMushroomsRef.current = [];
+      mushroomsRef.current.forEach(m => sceneRef.current?.remove(m));
+      mushroomsRef.current = [];
+      if (goldMushroomRef.current) {
+        sceneRef.current.remove(goldMushroomRef.current);
         goldMushroomRef.current = null;
-        if (speechBubbleRef.current) sceneRef.current.remove(speechBubbleRef.current);
-        speechBubbleRef.current = null;
-        spawnMushrooms(sceneRef.current);
       }
-      if (onMushroomCollect) onMushroomCollect(0);
-    },
+      spawnMushrooms(sceneRef.current);
+    }
+    if (onMushroomCollect) onMushroomCollect(0);
+  };
+
+  useImperativeHandle(ref, () => ({
+    resetGame: resetInternal,
     startMobileMotion: async () => {
       if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
         try {
@@ -139,13 +140,51 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
   };
 
   const spawnMushrooms = (scene: THREE.Scene) => {
+    // GRAND ARTWORK SPIRAL LOGIC
+    if (hasEverHadImmunity.current) {
+        if (mushroomsRef.current.length < 60) { // More mushrooms for a grander effect
+            const count = mushroomsRef.current.length;
+            const angle = count * 0.5; // Spiral spread
+            const radius = 10 + count * 6; // Expanding radius
+            
+            // Alternating colors for the artwork
+            const color = count % 3 === 0 ? GOLD_COLOR : THEME_COLOR;
+            const m = createMushroomModel(color);
+            
+            if (charGroupRef.current) {
+                m.position.set(
+                    charGroupRef.current.position.x + Math.cos(angle) * radius,
+                    0,
+                    charGroupRef.current.position.z + Math.sin(angle) * radius
+                );
+            }
+            
+            // Grand scale for artwork mushrooms
+            m.scale.set(3, 3, 3);
+            scene.add(m);
+            mushroomsRef.current.push(m);
+        }
+        return;
+    }
+
+    if (collectedCount.current >= MAX_TOTAL_MUSHROOMS) {
+      if (!goldMushroomRef.current && !hasEverHadImmunity.current) {
+        const gold = createMushroomModel(GOLD_COLOR);
+        const angle = Math.random() * Math.PI * 2;
+        gold.position.set(Math.cos(angle) * 120, 0, Math.sin(angle) * 120);
+        gold.scale.set(2, 2, 2);
+        scene.add(gold);
+        goldMushroomRef.current = gold;
+      }
+      return;
+    }
+
     const active = mushroomsRef.current.length;
     const needed = Math.max(0, (MAX_TOTAL_MUSHROOMS - collectedCount.current) - active);
-    for (let k = 0; k < (hasEverHadImmunity.current ? 3 : needed); k++) {
+    for (let k = 0; k < needed; k++) {
       const m = createMushroomModel(THEME_COLOR);
       const angle = Math.random() * Math.PI * 2;
-      const isGiant = collectedCount.current >= 5 || hasEverHadImmunity.current;
-      const dist = (isGiant ? 180 : 60) + Math.random() * 80;
+      const dist = 60 + Math.random() * 80;
       m.position.set(Math.cos(angle) * dist, 0, Math.sin(angle) * dist);
       scene.add(m); mushroomsRef.current.push(m);
     }
@@ -153,10 +192,14 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
 
   const spawnNemesis = (scene: THREE.Scene) => {
     const n = createMushroomModel(NEMESIS_COLOR);
-    const isGiant = collectedCount.current >= 5 || hasEverHadImmunity.current;
-    n.scale.set(isGiant ? 5 : 2, isGiant ? 5 : 2, isGiant ? 5 : 2);
+    n.scale.set(2.5, 2.5, 2.5);
     const angle = Math.random() * Math.PI * 2;
-    n.position.set(Math.cos(angle) * 150, 0, Math.sin(angle) * 150);
+    const offset = new THREE.Vector3(Math.cos(angle) * 80, 0, Math.sin(angle) * 80);
+    if (charGroupRef.current) {
+      n.position.copy(charGroupRef.current.position).add(offset);
+    } else {
+      n.position.set(offset.x, 0, offset.z);
+    }
     scene.add(n); nemesisMushroomsRef.current.push(n);
   };
 
@@ -167,18 +210,18 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
     scene.background = new THREE.Color(SKY_COLOR);
     scene.fog = new THREE.FogExp2(SKY_COLOR, 0.002);
     
-    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 4000);
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 5000);
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
     containerRef.current.appendChild(renderer.domElement);
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+    const sun = new THREE.DirectionalLight(0xffffff, 1.2);
     sun.position.set(100, 300, 100); sun.castShadow = true;
     scene.add(sun);
 
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), new THREE.MeshStandardMaterial({ color: FLOOR_COLOR }));
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(8000, 8000), new THREE.MeshStandardMaterial({ color: FLOOR_COLOR }));
     floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true;
     scene.add(floor);
 
@@ -209,7 +252,6 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
           fadeTo(animations.current.survey);
         }
 
-        // Apply new default scale
         model.scale.set(DEFAULT_SCALE, DEFAULT_SCALE, DEFAULT_SCALE);
         charGroupRef.current = new THREE.Group();
         charGroupRef.current.add(model);
@@ -219,23 +261,9 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
     };
     loadChar();
 
-    const onMouseDown = (e: MouseEvent) => { isDragging.current = true; lastMousePos.current = { x: e.clientX, y: e.clientY }; };
-    const onMouseUp = () => isDragging.current = false;
-    const onMouseMove = (e: MouseEvent) => {
-      if (isDragging.current) {
-        targetRotation.current.yaw -= (e.clientX - lastMousePos.current.x) * 0.008;
-        targetRotation.current.pitch = Math.max(-0.4, Math.min(0.8, targetRotation.current.pitch - (e.clientY - lastMousePos.current.y) * 0.008));
-        lastMousePos.current = { x: e.clientX, y: e.clientY };
-      }
-    };
-    
     const handleOrientation = (e: DeviceOrientationEvent) => {
       if (e.gamma !== null) gyroSteer.current = -(e.gamma / 45); 
     };
-
-    window.addEventListener('mousedown', onMouseDown);
-    window.addEventListener('mouseup', onMouseUp);
-    window.addEventListener('mousemove', onMouseMove);
     if (isMobile) window.addEventListener('deviceorientation', handleOrientation);
 
     const clock = new THREE.Clock();
@@ -258,11 +286,12 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
         const char = charGroupRef.current;
         const model = char.children[0];
         const keys = keysPressed.current;
-        const isGiant = collectedCount.current >= 5 || hasEverHadImmunity.current;
+        const isGiant = hasEverHadImmunity.current;
 
-        // Use updated constants
         const targetScale = isGiant ? GIANT_SCALE : DEFAULT_SCALE;
-        if (model) model.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.05);
+        if (model) {
+            model.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.05);
+        }
 
         const inputDir = new THREE.Vector3();
         let isMoving = false;
@@ -280,7 +309,6 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
         if (isMoving) {
           if (moveStartTime.current === 0) moveStartTime.current = Date.now();
           const holdDuration = Date.now() - moveStartTime.current;
-          
           const maxSpeed = isGiant ? 600 : 180;
           const runThreshold = 400; 
           
@@ -304,23 +332,72 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
 
         if (mixerRef.current) mixerRef.current.update(delta);
 
-        const collectDist = isGiant ? 15 : 4.5;
+        // Nemesis Pursuit Logic
+        const nemesisToRemove: number[] = [];
+        nemesisMushroomsRef.current.forEach((n, i) => {
+          if (!isGiant) {
+            const dir = char.position.clone().sub(n.position).normalize();
+            n.position.add(dir.multiplyScalar(15 * delta));
+            
+            if (char.position.distanceTo(n.position) < 3.5) {
+                if (collectedCount.current > 0) {
+                    collectedCount.current--;
+                    if (onMushroomCollect) onMushroomCollect(collectedCount.current);
+                    nemesisToRemove.push(i);
+                } else {
+                    resetInternal();
+                }
+            }
+          } else {
+             const dir = n.position.clone().sub(char.position).normalize();
+             n.position.add(dir.multiplyScalar(40 * delta));
+          }
+        });
+
+        nemesisToRemove.sort((a,b) => b-a).forEach(index => {
+            const n = nemesisMushroomsRef.current[index];
+            scene.remove(n);
+            nemesisMushroomsRef.current.splice(index, 1);
+        });
+
+        // Collectibles & Artwork Animation
+        const collectDist = isGiant ? 35 : 4.5;
         mushroomsRef.current.forEach((m, i) => {
-          if (char.position.distanceTo(m.position) < collectDist) {
+          if (isGiant) {
+              // Artwork breathing animation
+              m.position.y = Math.sin(elapsed * 2 + i) * 0.5;
+          } else if (char.position.distanceTo(m.position) < collectDist) {
             scene.remove(m); mushroomsRef.current.splice(i, 1);
             if (!hasEverHadImmunity.current) {
-              collectedCount.current++; if (onMushroomCollect) onMushroomCollect(collectedCount.current);
+              collectedCount.current++; 
+              if (onMushroomCollect) onMushroomCollect(collectedCount.current);
               spawnNemesis(scene);
             }
           }
         });
+
+        // Gold Mushroom logic
+        if (goldMushroomRef.current) {
+          goldMushroomRef.current.rotation.y += delta * 2;
+          if (char.position.distanceTo(goldMushroomRef.current.position) < collectDist) {
+            scene.remove(goldMushroomRef.current);
+            goldMushroomRef.current = null;
+            hasEverHadImmunity.current = true;
+            setHasImmunity(true);
+            // Clear existing and spawn grand artwork
+            mushroomsRef.current.forEach(m => scene.remove(m));
+            mushroomsRef.current = [];
+            spawnMushrooms(scene);
+          }
+        }
+
         spawnMushrooms(scene);
 
-        const camDist = isGiant ? 140 : 35;
-        const camH = isGiant ? 70 : 18;
+        const camDist = isGiant ? 280 : 35;
+        const camH = isGiant ? 160 : 18;
         const camOffset = new THREE.Vector3(0, camH + Math.sin(mouseRotation.current.pitch) * camDist * 0.5, -Math.cos(mouseRotation.current.pitch) * camDist).applyAxisAngle(new THREE.Vector3(0, 1, 0), mouseRotation.current.yaw);
         camera.position.lerp(char.position.clone().add(camOffset), 0.1);
-        camera.lookAt(char.position.x, char.position.y + (isGiant ? 15 : 3), char.position.z);
+        camera.lookAt(char.position.x, char.position.y + (isGiant ? 40 : 3), char.position.z);
       }
       renderer.render(scene, camera);
     };
@@ -328,8 +405,21 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
 
     const onKeyDown = (e: KeyboardEvent) => keysPressed.current.add(e.key.toLowerCase());
     const onKeyUp = (e: KeyboardEvent) => keysPressed.current.delete(e.key.toLowerCase());
+    const onMouseDown = (e: MouseEvent) => { isDragging.current = true; lastMousePos.current = { x: e.clientX, y: e.clientY }; };
+    const onMouseUp = () => isDragging.current = false;
+    const onMouseMove = (e: MouseEvent) => {
+      if (isDragging.current) {
+        targetRotation.current.yaw -= (e.clientX - lastMousePos.current.x) * 0.008;
+        targetRotation.current.pitch = Math.max(-0.4, Math.min(0.8, targetRotation.current.pitch - (e.clientY - lastMousePos.current.y) * 0.008));
+        lastMousePos.current = { x: e.clientX, y: e.clientY };
+      }
+    };
+
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
 
     return () => {
