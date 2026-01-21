@@ -83,6 +83,14 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
     if (onMushroomCollect) onMushroomCollect(0);
   };
 
+  // NEW: helper to remove gold mushroom on nemesis hit (pre-immunity)
+  const despawnGoldIfPresent = () => {
+    if (goldMushroomRef.current && sceneRef.current) {
+      sceneRef.current.remove(goldMushroomRef.current);
+      goldMushroomRef.current = null;
+    }
+  };
+
   useImperativeHandle(ref, () => ({
     resetGame: resetInternal,
     startMobileMotion: async () => {
@@ -344,6 +352,12 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
             if (char.position.distanceTo(n.position) < 3.5) {
                 if (collectedCount.current > 0) {
                     collectedCount.current--;
+
+                    // NEW: If hit before immunity, gold disappears until you re-find all 5
+                    if (!hasEverHadImmunity.current) {
+                      despawnGoldIfPresent();
+                    }
+
                     if (onMushroomCollect) onMushroomCollect(collectedCount.current);
                     nemesisToRemove.push(i);
                 } else {
@@ -362,6 +376,11 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
             scene.remove(n);
             nemesisMushroomsRef.current.splice(index, 1);
         });
+
+        // NEW: Safety - if below 5 and not immune yet, ensure gold is gone
+        if (!hasEverHadImmunity.current && collectedCount.current < MAX_TOTAL_MUSHROOMS) {
+          despawnGoldIfPresent();
+        }
 
         // Collectibles & Artwork Animation
         const collectDist = isGiant ? 45 : 4.5;
