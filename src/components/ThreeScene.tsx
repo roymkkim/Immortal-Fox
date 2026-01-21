@@ -142,12 +142,11 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
   const spawnMushrooms = (scene: THREE.Scene) => {
     // GRAND ARTWORK SPIRAL LOGIC
     if (hasEverHadImmunity.current) {
-        if (mushroomsRef.current.length < 60) { // More mushrooms for a grander effect
+        if (mushroomsRef.current.length < 80) { 
             const count = mushroomsRef.current.length;
-            const angle = count * 0.5; // Spiral spread
-            const radius = 10 + count * 6; // Expanding radius
+            const angle = count * 0.45; // Golden spiral-ish
+            const radius = 20 + count * 5.5; 
             
-            // Alternating colors for the artwork
             const color = count % 3 === 0 ? GOLD_COLOR : THEME_COLOR;
             const m = createMushroomModel(color);
             
@@ -159,8 +158,7 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
                 );
             }
             
-            // Grand scale for artwork mushrooms
-            m.scale.set(3, 3, 3);
+            m.scale.set(3.5, 3.5, 3.5);
             scene.add(m);
             mushroomsRef.current.push(m);
         }
@@ -194,7 +192,8 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
     const n = createMushroomModel(NEMESIS_COLOR);
     n.scale.set(2.5, 2.5, 2.5);
     const angle = Math.random() * Math.PI * 2;
-    const offset = new THREE.Vector3(Math.cos(angle) * 80, 0, Math.sin(angle) * 80);
+    // Spawn nemesis slightly further out to account for higher speed
+    const offset = new THREE.Vector3(Math.cos(angle) * 100, 0, Math.sin(angle) * 100);
     if (charGroupRef.current) {
       n.position.copy(charGroupRef.current.position).add(offset);
     } else {
@@ -332,12 +331,16 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
 
         if (mixerRef.current) mixerRef.current.update(delta);
 
-        // Nemesis Pursuit Logic
+        // NEMESIS PURSUIT LOGIC - ENHANCED DIFFICULTY
         const nemesisToRemove: number[] = [];
+        const baseNemesisSpeed = 22;
+        // Faster as you collect more mushrooms (difficulty scaling)
+        const currentNemesisSpeed = baseNemesisSpeed * (1 + (collectedCount.current * 0.15));
+        
         nemesisMushroomsRef.current.forEach((n, i) => {
           if (!isGiant) {
             const dir = char.position.clone().sub(n.position).normalize();
-            n.position.add(dir.multiplyScalar(15 * delta));
+            n.position.add(dir.multiplyScalar(currentNemesisSpeed * delta));
             
             if (char.position.distanceTo(n.position) < 3.5) {
                 if (collectedCount.current > 0) {
@@ -349,8 +352,9 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
                 }
             }
           } else {
+             // In giant mode, they flee even faster
              const dir = n.position.clone().sub(char.position).normalize();
-             n.position.add(dir.multiplyScalar(40 * delta));
+             n.position.add(dir.multiplyScalar(60 * delta));
           }
         });
 
@@ -361,10 +365,9 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
         });
 
         // Collectibles & Artwork Animation
-        const collectDist = isGiant ? 35 : 4.5;
+        const collectDist = isGiant ? 45 : 4.5;
         mushroomsRef.current.forEach((m, i) => {
           if (isGiant) {
-              // Artwork breathing animation
               m.position.y = Math.sin(elapsed * 2 + i) * 0.5;
           } else if (char.position.distanceTo(m.position) < collectDist) {
             scene.remove(m); mushroomsRef.current.splice(i, 1);
@@ -384,7 +387,6 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
             goldMushroomRef.current = null;
             hasEverHadImmunity.current = true;
             setHasImmunity(true);
-            // Clear existing and spawn grand artwork
             mushroomsRef.current.forEach(m => scene.remove(m));
             mushroomsRef.current = [];
             spawnMushrooms(scene);
@@ -393,11 +395,11 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
 
         spawnMushrooms(scene);
 
-        const camDist = isGiant ? 280 : 35;
-        const camH = isGiant ? 160 : 18;
+        const camDist = isGiant ? 350 : 35;
+        const camH = isGiant ? 180 : 18;
         const camOffset = new THREE.Vector3(0, camH + Math.sin(mouseRotation.current.pitch) * camDist * 0.5, -Math.cos(mouseRotation.current.pitch) * camDist).applyAxisAngle(new THREE.Vector3(0, 1, 0), mouseRotation.current.yaw);
         camera.position.lerp(char.position.clone().add(camOffset), 0.1);
-        camera.lookAt(char.position.x, char.position.y + (isGiant ? 40 : 3), char.position.z);
+        camera.lookAt(char.position.x, char.position.y + (isGiant ? 50 : 3), char.position.z);
       }
       renderer.render(scene, camera);
     };
