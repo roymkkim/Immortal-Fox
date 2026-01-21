@@ -315,7 +315,7 @@ const ThreeScene = forwardRef<ThreeSceneHandle, ThreeSceneProps>(({ isDarkMode, 
     if (isMoving) {
           if (moveStartTime.current === 0) moveStartTime.current = Date.now();
           const holdDuration = Date.now() - moveStartTime.current;
-          const maxSpeed = isGiant ? 360 : 110; // CHANGED: slightly faster than 300/90
+          const maxSpeed = isGiant ? 420 : 135;  // CHANGED: slightly faster than 300/90
           const runThreshold = 400; 
           
           if (holdDuration > runThreshold) {
